@@ -1,7 +1,6 @@
 package mysql
 
 import (
-	"encoding/json"
 	"errors"
 	// "fmt"
 	"io/ioutil"
@@ -9,37 +8,13 @@ import (
 	"strings"
 )
 
-// see also https://dev.mysql.com/doc/refman/5.5/en/option-files.html
-type MySqlOptionFile struct {
-	FileName   string
-	Properties map[string]map[string]string
-}
-
-func clone(src map[string]map[string]string) map[string]map[string]string {
-	dest := make(map[string]map[string]string)
-	for name, group := range src {
-		destGroup := dest[name]
-		if destGroup == nil {
-			destGroup = make(map[string]string)
-			dest[name] = destGroup
-		}
-		for key, value := range group {
-			destGroup[key] = value
-		}
-	}
-	return dest
-}
-
-func (this *MySqlOptionFile) String() string {
-	str, _ := json.Marshal(this.Properties)
-	return string(str)
-}
-
-func (this *MySqlOptionFile) Load() error {
+// Load mysql options.
+// See also https://dev.mysql.com/doc/refman/5.5/en/option-files.html
+func LoadOptions(conf string) (map[string]map[string]string, error) {
 	props := make(map[string]map[string]string)
-	content, err := ioutil.ReadFile(this.FileName)
+	content, err := ioutil.ReadFile(conf)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	var group map[string]string
@@ -66,7 +41,7 @@ func (this *MySqlOptionFile) Load() error {
 				key = strings.TrimSpace(keyValue[0])
 				value = strings.TrimSpace(keyValue[1])
 			} else {
-				return errors.New("fail to parse: " + line)
+				return nil, errors.New("fail to parse: " + line)
 			}
 			group = props[groupName]
 			if group == nil {
@@ -76,13 +51,13 @@ func (this *MySqlOptionFile) Load() error {
 			group[key] = value
 		}
 	}
-	this.Properties = props
-	return nil
+	return props, nil
 }
 
-func (this *MySqlOptionFile) Save(newFile string) error {
-	props := clone(this.Properties)
-	content, err := ioutil.ReadFile(this.FileName)
+// Change the content of the origin conf with the properties and save to a new conf file.
+// You may use the same conf file and it will replace the origin conf.
+func SaveOptions(originConf, newConf string, props map[string]map[string]string) error {
+	content, err := ioutil.ReadFile(originConf)
 	if err != nil {
 		return err
 	}
@@ -151,6 +126,6 @@ func (this *MySqlOptionFile) Save(newFile string) error {
 			newContent += moreKey + " = " + moreValue + "\n"
 		}
 	}
-	ioutil.WriteFile(newFile, []byte(newContent), 0644)
+	ioutil.WriteFile(newConf, []byte(newContent), 0644)
 	return nil
 }
