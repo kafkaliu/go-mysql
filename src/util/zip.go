@@ -8,9 +8,10 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
-func Unzip(unzipFile string, dest string) error {
+func Unzip(unzipFile string, dest string, options map[string]int) error {
 	log.Printf("extract %s to %s", unzipFile, dest)
 	rc, err := zip.OpenReader(unzipFile)
 	if err != nil {
@@ -21,27 +22,32 @@ func Unzip(unzipFile string, dest string) error {
 	n := 0
 	done := make(chan bool)
 	for _, f := range rc.Reader.File {
-		foc, _ := f.Open()
-		defer foc.Close()
-
-		var b bytes.Buffer
-		io.Copy(&b, foc)
+		// log.Printf("extract file: %s", f.Name)
 		if f.FileInfo().IsDir() {
-			log.Printf("extract directory: %s", f.Name)
-			os.MkdirAll(filepath.Join(dest, f.Name), f.Mode())
+			// log.Printf("extract directory: %s", f.Name)
+			// os.MkdirAll(filepath.Join(dest, f.Name), f.Mode())
 		} else {
-			log.Printf("extract file: %s", f.Name)
-			// log.Printf("dir is: %s", filepath.Dir(filepath.Join(dest, f.Name)))
-			os.MkdirAll(filepath.Dir(filepath.Join(dest, f.Name)), f.Mode())
+			foc, _ := f.Open()
+			defer foc.Close()
 
-			go func() {
-				ioutil.WriteFile(filepath.Join(dest, f.Name), b.Bytes(), f.Mode())
-				done <- true
-				n++
-			}()
-			if err = ioutil.WriteFile(filepath.Join(dest, f.Name), b.Bytes(), f.Mode()); err != nil {
-				return err
+			var b bytes.Buffer
+			io.Copy(&b, foc)
+			// log.Printf("dir is: %s", filepath.Dir(filepath.Join(dest, f.Name)))
+			name := ""
+			skipComponents := options["skip-components"]
+			for _, path := range strings.Split(filepath.Dir(f.Name), string(filepath.Separator))[skipComponents:] {
+				name += path + string(filepath.Separator)
 			}
+			name += filepath.Base(f.Name)
+
+			os.MkdirAll(filepath.Dir(filepath.Join(dest, name)), f.Mode())
+
+			go func(f *zip.File) {
+				// log.Printf("extract file: %s", f.Name)
+				ioutil.WriteFile(filepath.Join(dest, name), b.Bytes(), f.Mode())
+				done <- true
+			}(f)
+			n++
 		}
 	}
 	for ; n > 0; n-- {
